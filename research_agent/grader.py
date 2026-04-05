@@ -45,7 +45,7 @@ from retriever import Retriever, build_prompt
 # Part 1: GRADE — Evaluate whether retrieved chunks answer the question
 # ============================================================================
 
-def grade_results(query: str, chunks: list[dict], model: str) -> dict:
+def grade_results(query: str, chunks: list[dict], model: str, queries_tried: list[str] = None) -> dict:
     """
     Ask the LLM to judge: "Do these chunks actually answer the user's question?"
 
@@ -53,9 +53,11 @@ def grade_results(query: str, chunks: list[dict], model: str) -> dict:
     and acts as a quality gate.
 
     Args:
-        query:   The user's original question
-        chunks:  The retrieved chunks from vector search
-        model:   LiteLLM model string
+        query:          The user's original question
+        chunks:         The retrieved chunks from vector search
+        model:          LiteLLM model string
+        queries_tried:  List of queries already attempted (so the grader
+                        avoids suggesting similar ones)
 
     Returns:
         A dict with three fields:
@@ -89,7 +91,12 @@ def grade_results(query: str, chunks: list[dict], model: str) -> dict:
         "\n"
         'For "suggestion": if score < 3, suggest a DIFFERENT search query that\n'
         "might find better results. Use different words, be more specific, or\n"
-        "approach the topic from a different angle."
+        "approach the topic from a different angle.\n"
+        "\n"
+        "IMPORTANT: Look at the retrieved chunks for CLUES about what vocabulary\n"
+        "the documents use. If you see related terms in the chunks (e.g., a chunk\n"
+        "mentions 'Prometheus' or 'alerting'), use those exact terms in your\n"
+        "suggestion. Match the document's language, not the user's."
     )
 
     # Format the chunks for the grader to review
@@ -100,10 +107,22 @@ def grade_results(query: str, chunks: list[dict], model: str) -> dict:
             source += f", § {chunk['heading']}"
         chunks_text += f"[{i}] (source: {source})\n{chunk['text']}\n\n"
 
+    # If we've already tried other queries, tell the grader so it avoids
+    # suggesting similar things. This prevents the loop from getting stuck
+    # retrying slight variations of the same bad query.
+    tried_text = ""
+    if queries_tried:
+        tried_text = (
+            f"\nPrevious queries that didn't work well:\n"
+            + "\n".join(f"  - \"{q}\"" for q in queries_tried)
+            + "\nDo NOT suggest anything similar to these.\n"
+        )
+
     user_message = (
         f"Question: {query}\n\n"
         f"Retrieved chunks:\n"
         f"{chunks_text}"
+        f"{tried_text}"
         f"Grade these chunks for relevance to the question."
     )
 
@@ -211,7 +230,7 @@ def agentic_ask(
 
         # --- Step 2: Grade ---
         print(f"\n📊 Grading results...")
-        grade = grade_results(query, chunks, model)
+        grade = grade_results(query, chunks, model, queries_tried=queries_tried)
         #                     ^^^^^ Note: we grade against the ORIGINAL query,
         #                     not the reformulated one. The user's actual question
         #                     is what matters, not our rephrased search terms.
