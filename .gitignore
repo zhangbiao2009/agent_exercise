@@ -1,0 +1,13 @@
+# Virtual environments
+.venv/
+venv/
+
+# Generated data (re-create by running ingest.py)
+data/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS files
+.DS_Store
