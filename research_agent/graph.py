@@ -1,8 +1,12 @@
 """
-Step 4: LangGraph State Machine
-================================
+Step 4 + 5: LangGraph State Machine with Human-in-the-Loop
+===========================================================
 This script replaces the for-loop in grader.py with a LangGraph graph.
 Same logic, but structured as nodes (functions) and edges (decisions).
+
+Step 5 adds HUMAN-IN-THE-LOOP: when the grader scores low, the graph
+PAUSES and asks you what to search next. You can accept the suggestion,
+type your own query, or quit.
 
 WHY LANGGRAPH?
 --------------
@@ -17,6 +21,27 @@ LangGraph solves all of these by structuring the agent as a GRAPH:
   - Each step is a NODE (a function)
   - Each decision is a CONDITIONAL EDGE (which node to go to next)
   - State flows through the graph and is saved at each step
+
+HOW HUMAN-IN-THE-LOOP WORKS:
+----------------------------
+LangGraph has a built-in function called interrupt().
+
+1. When a node calls interrupt(payload), LangGraph:
+   - Saves the current state to the checkpointer
+   - Stops execution and returns to the caller
+   - The payload is sent back so the caller can show it to the user
+
+2. The caller (main loop) sees the graph is paused:
+   - graph.get_state(config).next is non-empty (there's more to do)
+   - The interrupt payload tells us what the grader suggested
+
+3. The caller collects user input and RESUMES:
+   - graph.invoke(Command(resume=user_input), config)
+   - Back inside the node, interrupt() RETURNS user_input
+   - The node continues as if interrupt() was just an input() call
+
+Think of interrupt() as a "networked input()" — it pauses the
+program, sends a message out, and waits for a response back.
 
 THE GRAPH:
 ----------
@@ -38,7 +63,7 @@ THE GRAPH:
     │         │
     ▼         ▼
 ┌────────┐ ┌─────────────┐
-│generate│ │ reformulate  │  Rewrite the query
+│generate│ │ reformulate  │  ⏸ PAUSE here if --human
 └───┬────┘ └──────┬──────┘
     │              │
     ▼              │ (loops back to retrieve)
@@ -49,9 +74,11 @@ THE GRAPH:
 Usage:
     export DEEPSEEK_API_KEY="sk-..."
 
+    # Fully automatic (same as before)
     python graph.py "What message broker did we choose?"
-    python graph.py "How do we know when things break?"
-    python graph.py "What's our mobile app roadmap?"
+
+    # Interactive — pauses and asks you when results are bad
+    python graph.py --human "How do we know when things break?"
 """
 
 import os
@@ -71,6 +98,12 @@ from langgraph.graph import StateGraph, START, END
 # MemorySaver: stores graph state in memory (for checkpointing)
 # Later we can swap this for SqliteSaver for persistence across restarts
 from langgraph.checkpoint.memory import MemorySaver
+
+# interrupt: pauses the graph and sends a value back to the caller.
+#   When resumed with Command(resume=X), interrupt() returns X.
+# Command: used to resume a paused graph. Command(resume=value) sends
+#   the value back to the interrupt() call that paused the graph.
+from langgraph.types import interrupt, Command
 
 # Reuse Retriever and build_prompt from Step 2 (no duplication)
 from retriever import Retriever, build_prompt
@@ -96,6 +129,7 @@ class AgentState(TypedDict):
     top_k: int              # Number of chunks to retrieve per search
     max_retries: int        # Maximum search attempts
     grade_threshold: int    # Minimum score to accept results
+    human_mode: bool        # If True, pause at reformulate for human input
 
     # --- Working state (updated by nodes as the graph runs) ---
     current_query: str      # The current search query (may be reformulated)
@@ -300,23 +334,71 @@ def reformulate_node(state: AgentState) -> dict:
     """
     NODE: Use the grader's suggestion as the new search query.
 
-    Reads:  state["grade"], state["attempt"]
+    Reads:  state["grade"], state["attempt"], state["human_mode"]
     Writes: state["current_query"], state["attempt"]
 
     This node only runs when the grader scored low AND we have retries left.
-    It takes the grader's suggestion and sets it as the next search query,
-    then increments the attempt counter.
+
+    WITHOUT --human: takes the grader's suggestion automatically.
+    WITH --human:    calls interrupt() to PAUSE the graph and ask the user.
+
+    HOW interrupt() WORKS:
+    ----------------------
+    interrupt(payload) does three things:
+      1. Saves the current graph state to the checkpointer
+      2. Sends `payload` back to the caller (so they can show it to the user)
+      3. PAUSES execution — the node function stops here
+
+    Later, when the caller does graph.invoke(Command(resume=X), config):
+      4. Execution RESUMES right here
+      5. interrupt() RETURNS the value X
+      6. The rest of the function continues normally
+
+    It's like Python's input(), except it works across processes:
+    the graph could be paused on a server and resumed from a web UI.
     """
     suggestion = state["grade"].get("suggestion", "")
     attempt = state["attempt"]
 
     print(f"\n  📍 NODE: reformulate")
-    print(f"🔄 Reformulating query...")
-    print(f"   Old: \"{state['current_query']}\"")
-    print(f"   New: \"{suggestion}\"")
+
+    if state.get("human_mode", False):
+        # ===== HUMAN-IN-THE-LOOP =====
+        # interrupt() pauses here and sends context to the caller.
+        # The caller shows this to the user and collects their input.
+        # When resumed, interrupt() returns whatever the user typed.
+        human_input = interrupt({
+            "suggestion": suggestion,
+            "score": state["grade"]["score"],
+            "reasoning": state["grade"]["reasoning"],
+            "queries_tried": state["queries_tried"],
+            "attempt": attempt,
+            "max_retries": state["max_retries"],
+        })
+
+        # Special case: if the user wants to quit, skip remaining retries.
+        # We set attempt = max_retries so should_retry_or_answer() routes
+        # to "generate" after the next retrieve→grade cycle.
+        if human_input == "__QUIT__":
+            print(f"⏹ User quit — will generate answer after one more search.")
+            return {
+                "current_query": suggestion if suggestion else state["current_query"],
+                "attempt": state["max_retries"],  # Force exit after next grade
+            }
+
+        # human_input is whatever the user passed via Command(resume=...)
+        # Empty string means "accept the suggestion"
+        new_query = human_input if human_input else suggestion
+        print(f"🔄 Human chose: \"{new_query}\"")
+    else:
+        # ===== FULLY AUTOMATIC =====
+        new_query = suggestion if suggestion else state["current_query"]
+        print(f"🔄 Reformulating query...")
+        print(f"   Old: \"{state['current_query']}\"")
+        print(f"   New: \"{new_query}\"")
 
     return {
-        "current_query": suggestion if suggestion else state["current_query"],
+        "current_query": new_query,
         "attempt": attempt + 1,
     }
 
@@ -503,12 +585,15 @@ def main():
     parser.add_argument("--db", default="data/lancedb", help="Path to LanceDB database")
     parser.add_argument("--thread", default="default",
                         help="Thread ID for checkpointing (same ID = same conversation)")
+    parser.add_argument("--human", action="store_true",
+                        help="Enable human-in-the-loop: pause and ask before reformulating")
     args = parser.parse_args()
 
     if args.question is None:
         print("Usage:")
         print('  python graph.py "What message broker did we choose?"')
         print('  python graph.py "How do we know when things break?"')
+        print('  python graph.py --human "How do we know when things break?"')
         print('  python graph.py --thread research-1 "What caused the Q3 outage?"')
         return
 
@@ -526,6 +611,7 @@ def main():
         "top_k": args.top_k,
         "max_retries": args.max_retries,
         "grade_threshold": args.threshold,
+        "human_mode": args.human,
         # Working state starts empty/at zero
         "current_query": args.question,   # First search uses the original question
         "chunks": [],
@@ -547,15 +633,78 @@ def main():
     print(f"  LangGraph Agentic RAG")
     print(f"  Thread: {args.thread}")
     print(f"  Model: {model}")
+    print(f"  Human-in-the-loop: {'ON' if args.human else 'OFF'}")
     print(f"{'=' * 60}")
 
-    # invoke() runs the graph from START to END, following edges.
-    # It returns the FINAL state after all nodes have run.
+    # --- Run the graph ---
+    # invoke() runs the graph from START until it either:
+    #   a) Reaches END → returns the final state
+    #   b) Hits an interrupt() → returns partial state + __interrupt__ key
     final_state = graph.invoke(initial_state, config)
+
+    # --- Human-in-the-loop resume loop ---
+    # After invoke(), check if the graph is PAUSED (hit an interrupt).
+    # If so, show the user what the grader suggested and ask for input.
+    # Then resume with Command(resume=user_input).
+    #
+    # graph.get_state(config).next tells us if there are more nodes to run.
+    # If it's empty → the graph reached END (we're done).
+    # If it's non-empty → the graph is paused at an interrupt.
+    while True:
+        snapshot = graph.get_state(config)
+
+        if not snapshot.next:
+            # Graph reached END — no more nodes to run
+            break
+
+        # --- The graph is paused at an interrupt ---
+        # The interrupt payload is in snapshot.tasks[0].interrupts[0].value
+        # This is the dict we passed to interrupt() in reformulate_node.
+        interrupt_data = snapshot.tasks[0].interrupts[0].value
+
+        suggestion = interrupt_data["suggestion"]
+        score = interrupt_data["score"]
+        reasoning = interrupt_data["reasoning"]
+        queries_tried = interrupt_data["queries_tried"]
+        attempt = interrupt_data["attempt"]
+        max_retries = interrupt_data["max_retries"]
+
+        # Show context to the human
+        print(f"\n{'─' * 60}")
+        print(f"  🤚 HUMAN-IN-THE-LOOP (attempt {attempt}/{max_retries})")
+        print(f"{'─' * 60}")
+        print(f"  Score: {score}/5 — {reasoning}")
+        print(f"  Queries tried so far: {queries_tried}")
+        print(f"  Grader suggests: \"{suggestion}\"")
+        print(f"")
+        print(f"  Options:")
+        print(f"    [Enter]     Accept the suggestion")
+        print(f"    [type]      Type your own search query")
+        print(f"    [q]         Quit and answer with best results so far")
+        print(f"{'─' * 60}")
+
+        user_input = input("  Your choice: ").strip()
+
+        if user_input.lower() == "q":
+            # Send __QUIT__ to the reformulate node. It will set attempt
+            # to max_retries, so after one more retrieve→grade cycle,
+            # should_retry_or_answer routes to generate.
+            print("  ⏹ Stopping — will generate answer with best results...")
+            final_state = graph.invoke(Command(resume="__QUIT__"), config)
+            continue
+
+        # Resume the graph with the user's input (or empty = accept suggestion)
+        # Command(resume=X) sends X back to the interrupt() call,
+        # which returns X, and the reformulate_node continues.
+        resume_value = user_input if user_input else suggestion
+        final_state = graph.invoke(Command(resume=resume_value), config)
+
+    # Get the final state (from checkpointer — always up to date)
+    final_state = graph.get_state(config).values
 
     # --- Print the answer ---
     print(f"\n{'=' * 60}")
-    print(f"📝 Answer:\n\n{final_state['answer']}")
+    print(f"📝 Answer:\n\n{final_state.get('answer', '(no answer generated)')}")
     print(f"{'=' * 60}")
 
     # --- Show a summary of what happened ---
