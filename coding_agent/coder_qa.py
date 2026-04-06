@@ -90,6 +90,7 @@ class AgentState(TypedDict):
     task: str               # What to build: "Write a function that..."
     model: str              # LLM model string
     max_attempts: int       # Max coder→qa rounds
+    strict_mode: bool       # If True, QA enforces extra rules (security, perf, etc.)
 
     # --- Working state (updated each round) ---
     code: str               # Current Python code (written by Coder)
@@ -130,6 +131,18 @@ def extract_code(response_text: str) -> str:
     matches = re.findall(pattern, response_text, re.DOTALL)
     if matches:
         return max(matches, key=len).strip()
+
+    # Handle UNCLOSED fences (LLM hit max_tokens before closing ```)
+    # Look for ```python\n... with no closing ```
+    pattern = r"```python\s*\n(.*)"
+    match = re.search(pattern, response_text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+
+    pattern = r"```\s*\n(.*)"
+    match = re.search(pattern, response_text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
 
     # No fences found — return as-is
     return response_text.strip()
@@ -319,18 +332,42 @@ def qa_node(state: AgentState) -> dict:
 
     # --- Step 1: Generate test cases (first round only) ---
     if not test_code:
-        print(f"📋 Generating test cases...")
-        test_prompt = (
-            f"You are a QA engineer. Write test code for this task:\n\n"
-            f"Task: {task}\n\n"
-            f"The solution is in solution.py. Write a test file that:\n"
-            f"1. Imports from solution (e.g., 'from solution import function_name')\n"
-            f"2. Uses simple assert statements (NOT pytest or unittest)\n"
-            f"3. Tests normal cases, edge cases (empty, None, etc.), and boundary cases\n"
-            f"4. Prints 'ALL TESTS PASSED' at the end if no assertions fail\n"
-            f"5. Has at least 5 test cases\n\n"
-            f"Output ONLY the test code in a ```python``` block."
-        )
+        strict = state.get("strict_mode", False)
+        print(f"📋 Generating test cases{' (STRICT mode)' if strict else ''}...")
+
+        if strict:
+            # STRICT MODE: adversarial tests that are hard to pass first try
+            test_prompt = (
+                f"You are a HOSTILE QA engineer. Write ADVERSARIAL test code.\n\n"
+                f"Task: {task}\n\n"
+                f"The solution is in solution.py. Write a test file that:\n"
+                f"1. Imports from solution (e.g., 'from solution import function_name')\n"
+                f"2. Uses simple assert statements (NOT pytest or unittest)\n"
+                f"3. Prints 'ALL TESTS PASSED' at the end if no assertions fail\n"
+                f"4. Has at least 10 test cases including:\n"
+                f"   - Normal cases\n"
+                f"   - Empty inputs ([], '', 0, None)\n"
+                f"   - Boundary values (negative numbers, very large numbers, MAX_INT)\n"
+                f"   - Type edge cases (float instead of int, bool, string of number)\n"
+                f"   - Duplicate values\n"
+                f"   - Single-element inputs\n"
+                f"   - Already-sorted / reverse-sorted inputs if applicable\n"
+                f"   - Performance test: call with a large input (n=10000) and check speed\n"
+                f"5. Wrap each test in try/except to show which test failed and why\n\n"
+                f"Output ONLY the test code in a ```python``` block."
+            )
+        else:
+            test_prompt = (
+                f"You are a QA engineer. Write test code for this task:\n\n"
+                f"Task: {task}\n\n"
+                f"The solution is in solution.py. Write a test file that:\n"
+                f"1. Imports from solution (e.g., 'from solution import function_name')\n"
+                f"2. Uses simple assert statements (NOT pytest or unittest)\n"
+                f"3. Tests normal cases, edge cases (empty, None, etc.), and boundary cases\n"
+                f"4. Prints 'ALL TESTS PASSED' at the end if no assertions fail\n"
+                f"5. Has at least 5 test cases\n\n"
+                f"Output ONLY the test code in a ```python``` block."
+            )
 
         test_response = litellm.completion(
             model=model,
@@ -339,7 +376,7 @@ def qa_node(state: AgentState) -> dict:
                 {"role": "user", "content": test_prompt},
             ],
             temperature=0.2,
-            max_tokens=1024,
+            max_tokens=2048,
         )
 
         test_code = extract_code(test_response.choices[0].message.content)
@@ -365,25 +402,54 @@ def qa_node(state: AgentState) -> dict:
         print(f"   │ {line}")
 
     # --- Step 3: LLM review ---
-    print(f"\n📊 LLM reviewing code...")
+    strict = state.get("strict_mode", False)
+    print(f"\n📊 LLM reviewing code{' (STRICT mode)' if strict else ''}...")
 
-    review_system = (
-        "You are a strict QA engineer. Review the code and test results.\n"
-        "\n"
-        "Respond with ONLY a JSON object:\n"
-        "{\n"
-        '  "status": "passed" | "needs_work",\n'
-        '  "issues": ["issue 1", "issue 2"],\n'
-        '  "summary": "one sentence overall assessment"\n'
-        "}\n"
-        "\n"
-        "Rules:\n"
-        '- "passed" means: code is correct, handles edge cases, tests pass\n'
-        '- "needs_work" means: there are bugs, missing edge cases, or test failures\n'
-        "- Be SPECIFIC about issues — say exactly what's wrong and how to fix it\n"
-        "- If tests passed and code looks correct, give it \"passed\"\n"
-        "- Don't nitpick style if the code is functionally correct"
-    )
+    if strict:
+        # STRICT MODE: enforce extra rules beyond basic correctness
+        review_system = (
+            "You are a SENIOR QA engineer doing a thorough code review.\n"
+            "\n"
+            "Respond with ONLY a JSON object:\n"
+            "{\n"
+            '  "status": "passed" | "needs_work",\n'
+            '  "issues": ["issue 1", "issue 2"],\n'
+            '  "summary": "one sentence overall assessment"\n'
+            "}\n"
+            "\n"
+            "You MUST check ALL of the following. Fail if ANY rule is violated:\n"
+            "\n"
+            "1. CORRECTNESS: Does the code solve the task? Do all tests pass?\n"
+            "2. INPUT VALIDATION: Does it validate types at the boundary?\n"
+            "   (e.g., raise TypeError/ValueError for wrong input types)\n"
+            "3. EDGE CASES: Does it handle empty, None, zero, negative, huge inputs?\n"
+            "4. NO BARE EXCEPT: No 'except:' or 'except Exception:' that swallows errors silently\n"
+            "5. EFFICIENCY: No obvious O(n²) when O(n) or O(n log n) is possible.\n"
+            "   If the task involves sorting/searching, the algorithm must be reasonable.\n"
+            "6. DOCSTRING: Must have a docstring with Args, Returns, and at least one Example\n"
+            "7. TYPE HINTS: Function signature must have type hints\n"
+            "\n"
+            "Be SPECIFIC: say exactly what's wrong and how to fix it.\n"
+            "Only give 'passed' if ALL rules are satisfied AND all tests pass."
+        )
+    else:
+        review_system = (
+            "You are a strict QA engineer. Review the code and test results.\n"
+            "\n"
+            "Respond with ONLY a JSON object:\n"
+            "{\n"
+            '  "status": "passed" | "needs_work",\n'
+            '  "issues": ["issue 1", "issue 2"],\n'
+            '  "summary": "one sentence overall assessment"\n'
+            "}\n"
+            "\n"
+            "Rules:\n"
+            '- "passed" means: code is correct, handles edge cases, tests pass\n'
+            '- "needs_work" means: there are bugs, missing edge cases, or test failures\n'
+            "- Be SPECIFIC about issues — say exactly what's wrong and how to fix it\n"
+            "- If tests passed and code looks correct, give it \"passed\"\n"
+            "- Don't nitpick style if the code is functionally correct"
+        )
 
     review_user = (
         f"Task: {task}\n\n"
@@ -538,12 +604,15 @@ def main():
     parser.add_argument("--model", default=None, help="LiteLLM model string")
     parser.add_argument("--thread", default="default",
                         help="Thread ID for checkpointing")
+    parser.add_argument("--strict", action="store_true",
+                        help="Strict QA: adversarial tests + enforces input validation, "
+                             "efficiency, docstrings, type hints")
     args = parser.parse_args()
 
     if args.task is None:
         print("Usage:")
         print('  python coder_qa.py "Write a function fizzbuzz(n)"')
-        print('  python coder_qa.py "Write a function to merge two sorted lists"')
+        print('  python coder_qa.py --strict "Write a function fizzbuzz(n)"')
         print('  python coder_qa.py --max-attempts 5 "Write a binary search function"')
         return
 
@@ -555,6 +624,7 @@ def main():
         "task": args.task,
         "model": model,
         "max_attempts": args.max_attempts,
+        "strict_mode": args.strict,
         "code": "",
         "test_code": "",
         "execution_result": "",
@@ -570,6 +640,7 @@ def main():
     print(f"  Coder + QA Multi-Agent System")
     print(f"  Model: {model}")
     print(f"  Max attempts: {args.max_attempts}")
+    print(f"  Strict QA: {'ON' if args.strict else 'OFF'}")
     print(f"{'=' * 60}")
     print(f"\n📋 Task: {args.task}")
 
@@ -600,37 +671,60 @@ if __name__ == "__main__":
 # TEST CASES & RESULTS
 # ============================================================================
 #
-# Test 1: FizzBuzz (classic, needs one fix)
-#   $ python coder_qa.py "Write a function fizzbuzz(n) that returns a list of
-#     strings for numbers 1 to n..."
-#   Round 1: Coder wrote fizzbuzz but raised ValueError for n=0.
-#            QA tests expected empty list → FAIL
-#   Round 2: Coder fixed (returns [] for n<1). All 7 tests passed → PASSED
+# --- Normal mode (no --strict) ---
+#
+# Test 1: FizzBuzz (needs one fix)
+#   $ python coder_qa.py "Write a function fizzbuzz(n)..."
+#   Round 1: Coder raised ValueError for n=0, QA tests expected [] → FAIL
+#   Round 2: Coder fixed (returns [] for n<1). All 7 tests passed
 #   Result: ✅ Passed in 2/3 attempts
 #
 # Test 2: Merge sorted lists (first-try pass)
 #   $ python coder_qa.py "Write a function merge_sorted(list1, list2)..."
-#   Round 1: Coder wrote two-pointer merge. Handled None, empty lists.
-#            All tests passed → PASSED
+#   Round 1: Two-pointer merge, handled None/empty. All tests passed
 #   Result: ✅ Passed in 1/3 attempts
 #
 # Test 3: Flatten nested list (first-try pass)
-#   $ python coder_qa.py "Write a function flatten(nested) that takes an
-#     arbitrarily nested list..."
-#   Round 1: Coder wrote recursive flatten. Handled empty, non-list input.
-#            All tests passed → PASSED
+#   $ python coder_qa.py "Write a function flatten(nested)..."
+#   Round 1: Recursive flatten. All tests passed
 #   Result: ✅ Passed in 1/3 attempts
 #
-# BUG FIXED DURING DEVELOPMENT:
-# - workspace path was relative, causing double-nesting (workspace/workspace/).
-#   Fixed by using os.path.abspath() in run_code().
+# --- Strict mode (--strict) ---
+#
+# Test 4: FizzBuzz strict (full 3-round loop)
+#   $ python coder_qa.py --strict "Write a function fizzbuzz(n)..."
+#   Round 1: 12 adversarial tests generated. 5 failed (ValueError vs empty
+#            list for n=0, float 5.0, string '5'). QA rejected.
+#   Round 2: Coder converted float/string to int. All 12 tests passed.
+#            QA still rejected: "type hint says int but accepts float/string"
+#   Round 3: Coder reverted to strict int-only. Tests 6,7 failed again
+#            (contradiction between tests and QA review).
+#   Result: ❌ Best effort after 3/3 attempts
+#   Note: This shows realistic spec ambiguity — QA tests and QA review
+#         disagree on whether to accept float/string inputs!
+#
+# Test 5: Merge sorted strict (full 3-round loop)
+#   $ python coder_qa.py --strict "Write a function merge_sorted(list1, list2)..."
+#   All 3 rounds used. QA demanded input type validation, then changed
+#   its mind about how strict it should be. Similar spec ambiguity.
+#   Result: ❌ Best effort after 3/3 attempts
+#
+# BUGS FIXED DURING DEVELOPMENT:
+# - workspace path double-nesting: run_code used relative path, subprocess
+#   cwd also relative → workspace/workspace/. Fixed with os.path.abspath().
+# - Unclosed markdown fences: LLM hit max_tokens mid-code-block, leaving
+#   ```python with no closing ```. extract_code regex failed silently.
+#   Fixed by adding fallback regex for unclosed fences.
+# - max_tokens too low for strict test generation: bumped from 1024 to 2048.
 #
 # KEY OBSERVATIONS:
-# - The Coder+QA loop works well: QA gives specific, actionable feedback
-# - Real execution (subprocess) catches crashes that LLM review would miss
-# - Auto-generated tests sometimes disagree with the Coder's design choices
-#   (e.g., ValueError vs empty list for edge cases) — this creates productive
-#   friction that improves the final code
-# - DeepSeek writes clean Python on first try for straightforward tasks
-# - The feedback loop is most valuable when Coder makes edge-case decisions
-#   that don't match QA's expectations
+# - Normal mode: LLMs write correct code first-try for simple tasks,
+#   making the loop easy to miss. The loop mainly helps with edge case
+#   disagreements (ValueError vs empty list).
+# - Strict mode: Reliably triggers multi-round loops by demanding input
+#   validation, type hints, docstrings, efficiency, and adversarial tests.
+# - Interesting tension: QA-generated tests and QA review can DISAGREE
+#   (tests expect float→int conversion, review says "don't accept floats").
+#   This mirrors real-world spec ambiguity between test suites and reviewers.
+# - Real execution is essential: catches crashes that LLM review misses.
+# - The loop cap (max_attempts) prevents infinite disagreement loops.
