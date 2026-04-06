@@ -1,0 +1,457 @@
+{
+  "metadata": {
+    "timestamp": "2026-04-05_183034",
+    "model": "deepseek/deepseek-chat",
+    "total": 20,
+    "passed": 14,
+    "pass_rate": "70%",
+    "pass_threshold": 4
+  },
+  "results": [
+    {
+      "id": 1,
+      "question": "What message broker did we choose and why?",
+      "category": "easy",
+      "answerable": true,
+      "expected_answer": "Apache Kafka, chosen for its event sourcing capability which is critical for audit trail requirements. High throughput and the team's existing Kubernetes expertise made the ops complexity manageable.",
+      "expected_source": "architecture-decisions.md",
+      "agent_answer": "We chose Apache Kafka as our message broker. The decision was driven by its event sourcing capability, which is critical for our audit trail requirements. While Kafka is operationally complex, we considered this manageable since we already run Kubernetes. (source: architecture-decisions.md, \u00a7 2025-10-02: Choosing a Message Broker)",
+      "agent_best_score": 5,
+      "agent_attempts": 1,
+      "agent_time": 4.6,
+      "queries_tried": [
+        "What message broker did we choose and why?"
+      ],
+      "scores": {
+        "correctness": 5,
+        "faithfulness": 5,
+        "completeness": 5,
+        "reasoning": "The agent's answer contains all key facts from the expected answer with accurate phrasing and proper source attribution."
+      },
+      "passed": true
+    },
+    {
+      "id": 2,
+      "question": "What caused the Q3 2025 outage?",
+      "category": "easy",
+      "answerable": true,
+      "expected_answer": "A database migration script ran against production instead of staging due to a misconfigured environment variable ($DB_HOST). It corrupted the users table, which cascaded to all services because they shared a single PostgreSQL instance.",
+      "expected_source": "incident-q3-2025.md",
+      "agent_answer": "The Q3 2025 outage was caused by a migration script that ran an `ALTER TABLE` operation on the production users table during a deployment. This triggered a cascade of failures, starting with 500 errors on the login endpoint and eventually causing all API endpoints to return errors. (source: incident-q3-2025.md, \u00a7 Timeline)",
+      "agent_best_score": 3,
+      "agent_attempts": 1,
+      "agent_time": 5.1,
+      "queries_tried": [
+        "What caused the Q3 2025 outage?"
+      ],
+      "scores": {
+        "correctness": 4,
+        "faithfulness": 5,
+        "completeness": 3,
+        "reasoning": "The agent correctly identifies the migration script as the cause and mentions production impact, but omits the key detail about the misconfigured environment variable ($DB_HOST) and the shared PostgreSQL instance that explains why staging vs. production confusion occurred."
+      },
+      "passed": false
+    },
+    {
+      "id": 3,
+      "question": "How do we handle secrets and credential rotation?",
+      "category": "easy",
+      "answerable": true,
+      "expected_answer": "We use HashiCorp Vault (switched from Kubernetes Secrets in Nov 2025). Each service has a unique Vault role. Database credentials rotate every 30 days, API keys every 90 days, TLS certificates auto-renewed by cert-manager 30 days before expiry.",
+      "expected_source": "kubernetes-notes.md",
+      "agent_answer": "We handle secrets using HashiCorp Vault, having switched from Kubernetes Secrets in November 2025. Each service is assigned a unique Vault role with access limited to its own secrets. (source: kubernetes-notes.md, \u00a7 Secrets Management)\n\nOur credential rotation policy is:\n- **Database credentials**: Rotated automatically every 30 days.\n- **API keys**: Rotated every 90 days.\n- **TLS certificates**: Managed by cert-manager and auto-renewed 30 days before expiry. (source: kubernetes-notes.md, \u00a7 Secrets Management)\n\nAdditionally, for IAM keys, we reduced their lifetime to 12 hours using STS temporary credentials following an incident. (source: security-notes.md, \u00a7 Secret Incidents)",
+      "agent_best_score": 5,
+      "agent_attempts": 1,
+      "agent_time": 5.8,
+      "queries_tried": [
+        "How do we handle secrets and credential rotation?"
+      ],
+      "scores": {
+        "correctness": 5,
+        "faithfulness": 4,
+        "completeness": 5,
+        "reasoning": "The agent's answer contains all key facts from the expected answer and adds an extra detail about IAM keys from another source, which is accurate but not required."
+      },
+      "passed": true
+    },
+    {
+      "id": 4,
+      "question": "What is our monitoring and alerting stack?",
+      "category": "easy",
+      "answerable": true,
+      "expected_answer": "Prometheus for metrics (15s scrape interval), Grafana for dashboards and alerting, Loki for log aggregation (replaced ELK, 60% cost reduction), Jaeger for distributed tracing. Alerts route to PagerDuty for P1/P2, Slack for P3/P4.",
+      "expected_source": "kubernetes-notes.md",
+      "agent_answer": "Our monitoring stack consists of Prometheus for metrics collection, Grafana for dashboards and alerting, Loki for log aggregation, and Jaeger for distributed tracing. Alert routing is configured to send P1/P2 alerts to PagerDuty and P3/P4 alerts to the Slack #alerts channel.\n\n(source: kubernetes-notes.md, \u00a7 Monitoring Stack)",
+      "agent_best_score": 5,
+      "agent_attempts": 1,
+      "agent_time": 4.3,
+      "queries_tried": [
+        "What is our monitoring and alerting stack?"
+      ],
+      "scores": {
+        "correctness": 5,
+        "faithfulness": 5,
+        "completeness": 5,
+        "reasoning": "The agent's answer contains all key facts from the expected answer, is fully grounded in the source documentation, and covers all aspects of the monitoring and alerting stack."
+      },
+      "passed": true
+    },
+    {
+      "id": 5,
+      "question": "What API gateway did we select?",
+      "category": "easy",
+      "answerable": true,
+      "expected_answer": "Envoy, chosen for native gRPC support, built-in Prometheus metrics for observability, and Istio service mesh integration. It's open source so the proxy costs $0, with about $200/month additional compute.",
+      "expected_source": "architecture-decisions.md",
+      "agent_answer": "We selected Envoy as our API gateway. (source: architecture-decisions.md, \u00a7 2025-11-20: API Gateway Selection)",
+      "agent_best_score": 5,
+      "agent_attempts": 1,
+      "agent_time": 3.7,
+      "queries_tried": [
+        "What API gateway did we select?"
+      ],
+      "scores": {
+        "correctness": 3,
+        "faithfulness": 5,
+        "completeness": 2,
+        "reasoning": "The agent correctly identifies Envoy and is faithful to the source, but it omits all key selection criteria and cost details from the expected answer."
+      },
+      "passed": false
+    },
+    {
+      "id": 6,
+      "question": "How many engineers do we have and how many are we hiring?",
+      "category": "easy",
+      "answerable": true,
+      "expected_answer": "Currently 42 engineers across 6 teams. Plan to hire 8 more in Q1-Q2 2026: 2 SRE/Platform, 3 Backend (payment rewrite), 2 Frontend (new dashboard), 1 ML engineer (recommendation system).",
+      "expected_source": "meeting-notes.md",
+      "agent_answer": "Currently, there are 42 engineers across 6 teams. The plan is to hire 8 more engineers in Q1-Q2 2026. (source: meeting-notes.md, \u00a7 January 15, 2026)",
+      "agent_best_score": 5,
+      "agent_attempts": 1,
+      "agent_time": 3.4,
+      "queries_tried": [
+        "How many engineers do we have and how many are we hiring?"
+      ],
+      "scores": {
+        "correctness": 3,
+        "faithfulness": 5,
+        "completeness": 2,
+        "reasoning": "The agent correctly states the current engineer count and hiring timeline but omits all specific breakdown details about which roles are being hired."
+      },
+      "passed": false
+    },
+    {
+      "id": 7,
+      "question": "What happened with the AWS key leak?",
+      "category": "easy",
+      "answerable": true,
+      "expected_answer": "In October 2025, a junior developer committed an AWS access key to a public repo. GitHub secret scanning detected it within 3 minutes. Key was rotated within 15 minutes. No unauthorized access found. Response: mandatory pre-commit hooks with gitleaks, security training, reduced IAM key lifetime to 12 hours using STS.",
+      "expected_source": "security-notes.md",
+      "agent_answer": "The AWS key leak occurred in October 2025 when a junior developer accidentally committed an AWS access key to a public Git repository. The leak was detected by GitHub's secret scanning within 3 minutes, and the key was rotated within 15 minutes. A review of CloudTrail logs found no evidence of unauthorized access. (source: security-notes.md, \u00a7 Secret Incidents)",
+      "agent_best_score": 5,
+      "agent_attempts": 1,
+      "agent_time": 4.8,
+      "queries_tried": [
+        "What happened with the AWS key leak?"
+      ],
+      "scores": {
+        "correctness": 5,
+        "faithfulness": 5,
+        "completeness": 4,
+        "reasoning": "The agent's answer contains all key facts from the expected answer about the leak incident itself but omits the preventive measures implemented afterward."
+      },
+      "passed": true
+    },
+    {
+      "id": 8,
+      "question": "What database does each service use?",
+      "category": "easy",
+      "answerable": true,
+      "expected_answer": "Auth service: PostgreSQL. Payment service: PostgreSQL with row-level security. Reporting: ClickHouse (columnar, analytics-optimized). User profiles: MongoDB (flexible schema). Each service gets its own database (database-per-service pattern).",
+      "expected_source": "architecture-decisions.md",
+      "agent_answer": "Based on the provided context:\n\n- **Auth service**: PostgreSQL (source: architecture-decisions.md, \u00a7 2026-01-10: Database Strategy)\n- **Payment service**: PostgreSQL with row-level security (source: architecture-decisions.md, \u00a7 2026-01-10: Database Strategy)\n- **Reporting service**: ClickHouse (source: architecture-decisions.md, \u00a7 2026-01-10: Database Strategy)\n- **User profiles service**: MongoDB (source: architecture-decisions.md, \u00a7 2026-01-10: Database Strategy)\n\nThis follows the database-per-service pattern, which was adopted to avoid the single point of failure associated with a shared database.",
+      "agent_best_score": 5,
+      "agent_attempts": 1,
+      "agent_time": 5.1,
+      "queries_tried": [
+        "What database does each service use?"
+      ],
+      "scores": {
+        "correctness": 5,
+        "faithfulness": 5,
+        "completeness": 5,
+        "reasoning": "The agent's answer contains all key facts from the expected answer, is fully grounded in the source document, and covers all aspects of the expected answer including the database-per-service pattern."
+      },
+      "passed": true
+    },
+    {
+      "id": 9,
+      "question": "What is the status of the microservices migration?",
+      "category": "medium",
+      "answerable": true,
+      "expected_answer": "Auth service extraction is complete (running in production since Feb 10, 2026). Payment service is 60% complete but blocked on PCI compliance review. Reporting engine has not started, deprioritized in favor of payment service.",
+      "expected_source": "meeting-notes.md",
+      "agent_answer": "Based on the provided context, the microservices migration is in progress. The decision to break up the monolith was made after the Q3 2025 outage, with a plan to start in October 2025 and an estimated timeline of 6 months (source: architecture-decisions.md, \u00a7 2025-09-15: Breaking Up the Monolith). As of January 2026, the extraction of the payment service is specifically noted as complicating PCI DSS compliance re-scoping (source: security-notes.md, \u00a7 PCI DSS Compliance (Payment Service)), and the 2026 budget includes allocations for Kubernetes cluster expansion to support the new microservices (source: meeting-notes.md, \u00a7 January 15, 2026).",
+      "agent_best_score": 3,
+      "agent_attempts": 1,
+      "agent_time": 5.8,
+      "queries_tried": [
+        "What is the status of the microservices migration?"
+      ],
+      "scores": {
+        "correctness": 2,
+        "faithfulness": 3,
+        "completeness": 2,
+        "reasoning": "The agent's answer contains some relevant facts but misses all three specific status updates from the expected answer about auth service completion, payment service progress, and reporting engine status."
+      },
+      "passed": false
+    },
+    {
+      "id": 10,
+      "question": "How long was the Q3 outage and what was the timeline?",
+      "category": "medium",
+      "answerable": true,
+      "expected_answer": "4 hours 12 minutes (09:15 to 13:27 UTC). Migration triggered at 09:15, first alerts at 09:18, all endpoints down by 09:22, war room at 09:30, root cause found at 10:45, database restored from 3-hour-old backup at 12:00, resolved at 13:27.",
+      "expected_source": "incident-q3-2025.md",
+      "agent_answer": "The Q3 2025 outage lasted **4 hours and 12 minutes**, from 09:15 UTC to 13:27 UTC (source: incident-q3-2025.md, \u00a7 Q3 2025 Incident Post-Mortem).\n\nThe detailed timeline was:\n- **09:15** \u2014 Deploy pipeline triggers migration script\n- **09:18** \u2014 First alerts fire: 500 errors on /api/login\n- **09:22** \u2014 All API endpoints returning errors\n- **09:30** \u2014 Incident declared, war room opened\n- **10:45** \u2014 Root cause identified: migration ran ALTER TABLE on production users table\n- **12:00** \u2014 Database restored from backup (3-hour-old snapshot)\n- **13:27** \u2014 All services verified healthy, incident closed (source: incident-q3-2025.md, \u00a7 Timeline).",
+      "agent_best_score": 5,
+      "agent_attempts": 1,
+      "agent_time": 6.3,
+      "queries_tried": [
+        "How long was the Q3 outage and what was the timeline?"
+      ],
+      "scores": {
+        "correctness": 5,
+        "faithfulness": 5,
+        "completeness": 5,
+        "reasoning": "The agent's answer contains all key facts from the expected answer with precise timing and details, is fully grounded in the source document, and covers the complete timeline and duration."
+      },
+      "passed": true
+    },
+    {
+      "id": 11,
+      "question": "How does our payment service handle distributed transactions?",
+      "category": "medium",
+      "answerable": true,
+      "expected_answer": "Uses the Saga pattern with choreography (event-based, not orchestration). Example: Place Order creates order, reserves funds, reserves inventory. If all succeed, confirm all. If any fails, compensating transactions run (refund, unreserve). Each service listens for events and reacts.",
+      "expected_source": "distributed-systems-notes.md",
+      "agent_answer": "Our payment service handles distributed transactions using the Saga pattern, specifically with event-based choreography. Since each service has its own database, traditional ACID transactions aren't possible across services. In a transaction like placing an order, the payment service would listen for events and react\u2014for example, by reserving funds when triggered. If any step fails, compensating transactions (like refunds) are executed to roll back the changes. (source: distributed-systems-notes.md, \u00a7 Saga Pattern for Distributed Transactions)",
+      "agent_best_score": 5,
+      "agent_attempts": 1,
+      "agent_time": 4.8,
+      "queries_tried": [
+        "How does our payment service handle distributed transactions?"
+      ],
+      "scores": {
+        "correctness": 5,
+        "faithfulness": 5,
+        "completeness": 5,
+        "reasoning": "The agent's answer contains all key facts from the expected answer including the Saga pattern with choreography, event-based approach, example of reserving funds, and compensating transactions for rollback."
+      },
+      "passed": true
+    },
+    {
+      "id": 12,
+      "question": "What are our PCI DSS compliance requirements?",
+      "category": "medium",
+      "answerable": true,
+      "expected_answer": "PCI DSS Level 2. Cardholder data encrypted at rest (AES-256) and in transit (TLS 1.3). No raw card numbers stored \u2014 tokenized via Stripe. Quarterly vulnerability scans by ASV. Annual penetration test. Access requires MFA + VPN + IP allowlist. Compliant as of January 2026 audit.",
+      "expected_source": "security-notes.md",
+      "agent_answer": "Based on the provided context:\n\nOur PCI DSS compliance requirements include:\n- Encrypting cardholder data at rest using AES-256 and in transit using TLS 1.3\n- Not storing raw card numbers - we tokenize via Stripe\n- Conducting quarterly vulnerability scans by an approved scanning vendor (ASV)\n- Performing annual penetration tests (last done November 2025, next due November 2026)\n- Requiring MFA + VPN + IP allowlist for access to payment systems\n\nWe are currently PCI DSS Level 2 compliant as of the January 2026 audit. However, the payment service extraction is complicating compliance because we need to re-scope the PCI boundary for the new microservice.\n\n(source: security-notes.md, \u00a7 PCI DSS Compliance (Payment Service))",
+      "agent_best_score": 5,
+      "agent_attempts": 1,
+      "agent_time": 5.5,
+      "queries_tried": [
+        "What are our PCI DSS compliance requirements?"
+      ],
+      "scores": {
+        "correctness": 5,
+        "faithfulness": 5,
+        "completeness": 5,
+        "reasoning": "The agent's answer contains all key facts from the expected answer while also providing additional relevant context about the payment service extraction complication."
+      },
+      "passed": true
+    },
+    {
+      "id": 13,
+      "question": "What is the engineering budget for 2026?",
+      "category": "medium",
+      "answerable": true,
+      "expected_answer": "Approximately $974,000 (15% increase from 2025's $847,000). Extra budget allocated to: Kubernetes cluster expansion for microservices, hiring 2 SRE engineers, and proof of concept for edge computing. Also $150,000 allocated for AI/ML experiments.",
+      "expected_source": "meeting-notes.md",
+      "agent_answer": "The engineering infrastructure budget for 2026 is approximately $974,000, which is a 15% increase from the 2025 total of $847,000. (source: meeting-notes.md, \u00a7 January 15, 2026)",
+      "agent_best_score": 5,
+      "agent_attempts": 1,
+      "agent_time": 3.9,
+      "queries_tried": [
+        "What is the engineering budget for 2026?"
+      ],
+      "scores": {
+        "correctness": 4,
+        "faithfulness": 5,
+        "completeness": 3,
+        "reasoning": "The agent correctly states the budget amount and percentage increase but omits the detailed breakdown of how the extra budget is allocated."
+      },
+      "passed": false
+    },
+    {
+      "id": 14,
+      "question": "What problems did we face running Kafka on Kubernetes?",
+      "category": "medium",
+      "answerable": true,
+      "expected_answer": "Three issues with Strimzi operator: 1) Broker rebalancing caused 30-second message delays during pod restarts. 2) Persistent volume claims needed manual cleanup after broker decommission. 3) ZooKeeper was a constant headache \u2014 switched to KRaft mode in December 2025. Current config: 5 brokers, replication factor 3, 200 partitions.",
+      "expected_source": "kubernetes-notes.md",
+      "agent_answer": "We faced three main problems when running Kafka on Kubernetes:\n\n1. **Broker rebalancing caused 30-second message delays during pod restarts.**  \n2. **Persistent volume claims needed manual cleanup after broker decommission.**  \n3. **ZooKeeper was a constant headache** \u2014 we switched to KRaft mode in December 2025 to resolve this.  \n\n(source: kubernetes-notes.md, \u00a7 Lessons from the Kafka Migration)",
+      "agent_best_score": 4,
+      "agent_attempts": 1,
+      "agent_time": 5.1,
+      "queries_tried": [
+        "What problems did we face running Kafka on Kubernetes?"
+      ],
+      "scores": {
+        "correctness": 5,
+        "faithfulness": 5,
+        "completeness": 4,
+        "reasoning": "The agent's answer correctly includes all three key problems from the expected answer with accurate details, is fully grounded in the source document, but omits the current configuration details (5 brokers, replication factor 3, 200 partitions)."
+      },
+      "passed": true
+    },
+    {
+      "id": 15,
+      "question": "How does our zero trust network implementation work?",
+      "category": "hard",
+      "answerable": true,
+      "expected_answer": "Implemented in phases: 1) Service-to-service mTLS via Istio (done Q4 2025). 2) Network policies \u2014 deny all by default, explicit allow rules (done Q4 2025). 3) Identity-aware proxy for internal tools (in progress). 4) Full BeyondCorp model for employee access (planned Q3 2026).",
+      "expected_source": "security-notes.md",
+      "agent_answer": "Our zero trust network is being implemented in phases:\n\n1. **Service-to-service mTLS via Istio** \u2013 Already completed in Q4 2025, providing mutual TLS authentication between internal services. (source: security-notes.md, \u00a7 Zero Trust Network)\n\n2. **Network policies** \u2013 Also completed in Q4 2025, enforcing a \"deny all by default\" rule with explicit allow rules. (source: security-notes.md, \u00a7 Zero Trust Network)\n\n3. **Identity-aware proxy for internal tools** \u2013 Currently in progress. (source: security-notes.md, \u00a7 Zero Trust Network)\n\n4. **Full BeyondCorp model for employee access** \u2013 Planned for Q3 2026. (source: security-notes.md, \u00a7 Zero Trust Network)\n\nAdditionally, internal services use mTLS certificates managed by Vault for authentication. (source: security-notes.md, \u00a7 Authentication Architecture)",
+      "agent_best_score": 3,
+      "agent_attempts": 1,
+      "agent_time": 6.9,
+      "queries_tried": [
+        "How does our zero trust network implementation work?"
+      ],
+      "scores": {
+        "correctness": 5,
+        "faithfulness": 4,
+        "completeness": 5,
+        "reasoning": "The answer correctly includes all four key phases with accurate details and timing, but adds an unsupported detail about Vault-managed certificates that wasn't in the expected answer."
+      },
+      "passed": true
+    },
+    {
+      "id": 16,
+      "question": "What lessons did we learn from the Q3 outage?",
+      "category": "hard",
+      "answerable": true,
+      "expected_answer": "Three key lessons: 1) Shared database is a single point of failure \u2014 led to the database-per-service decision. 2) Environment variables need validation \u2014 now require explicit confirmation before destructive operations. 3) Backup frequency was insufficient \u2014 3-hour-old backup meant data loss, switched to continuous WAL archiving.",
+      "expected_source": "incident-q3-2025.md",
+      "agent_answer": "Based on the provided context, the lessons learned from the Q3 2025 outage were:\n\n1.  **The risk of a monolithic architecture:** The outage was a \"complete platform outage\" because a single database migration on the production users table took down all API endpoints (source: incident-q3-2025.md, \u00a7 Q3 2025 Incident Post-Mortem; \u00a7 Timeline). This led to the architectural decision to break up the monolith into smaller, independently deployable services to limit the blast radius of future failures (source: architecture-decisions.md, \u00a7 2025-09-15: Breaking Up the Monolith).\n\n2.  **The need for safer deployment and migration procedures:** The root cause was a migration script running an `ALTER TABLE` on the production users table during a deploy (source: incident-q3-2025.md, \u00a7 Timeline). The incident highlighted the danger of such operations and the critical role of backups, which were used for restoration (source: incident-q3-2025.md, \u00a7 Timeline).",
+      "agent_best_score": 3,
+      "agent_attempts": 2,
+      "agent_time": 9.6,
+      "queries_tried": [
+        "What lessons did we learn from the Q3 outage?",
+        "Q3 2025 outage root cause analysis lessons learned"
+      ],
+      "scores": {
+        "correctness": 2,
+        "faithfulness": 2,
+        "completeness": 2,
+        "reasoning": "The agent's answer contains only one partially correct fact (about migration procedures) but misses all three key lessons from the expected answer and introduces unrelated information about monolithic architecture."
+      },
+      "passed": false
+    },
+    {
+      "id": 17,
+      "question": "What is our AI strategy?",
+      "category": "hard",
+      "answerable": true,
+      "expected_answer": "Three phases: Phase 1 is a customer support chatbot using RAG over the knowledge base. Phase 2 is AI-assisted code review for internal PRs. Phase 3 is a recommendation engine powered by embeddings. Budget is $150,000 for AI/ML experiments in 2026, using DeepSeek and Claude models.",
+      "expected_source": "meeting-notes.md",
+      "agent_answer": "Our AI strategy involves a three-phase integration plan into the product, with a budget of $150,000 allocated for AI/ML experiments in 2026. The phases are:\n\n1. **Phase 1**: Implement a customer support chatbot using RAG over our knowledge base.\n2. **Phase 2**: Introduce AI-assisted code review for internal PRs.\n3. **Phase 3**: Build a recommendation engine powered by embeddings.\n\nTo manage costs, the plan is to use DeepSeek and Claude models. (source: meeting-notes.md, \u00a7 February 28, 2026)",
+      "agent_best_score": 5,
+      "agent_attempts": 1,
+      "agent_time": 5.9,
+      "queries_tried": [
+        "What is our AI strategy?"
+      ],
+      "scores": {
+        "correctness": 5,
+        "faithfulness": 5,
+        "completeness": 5,
+        "reasoning": "The agent's answer contains all key facts from the expected answer, is fully grounded in the source, and covers all aspects of the strategy."
+      },
+      "passed": true
+    },
+    {
+      "id": 18,
+      "question": "What is our mobile app roadmap?",
+      "category": "unanswerable",
+      "answerable": false,
+      "expected_answer": "",
+      "expected_source": "",
+      "agent_answer": "I couldn't find relevant information in the documents to answer your question: \"What is our mobile app roadmap?\"\n\nQueries tried: ['What is our mobile app roadmap?', 'mobile app development timeline, mobile client features, iOS/Android release schedule, mobile team OKRs', 'mobile client development, iOS/Android app features, mobile team roadmap, mobile SDK integration']\nBest relevance score: 1/5",
+      "agent_best_score": 1,
+      "agent_attempts": 3,
+      "agent_time": 7.9,
+      "queries_tried": [
+        "What is our mobile app roadmap?",
+        "mobile app development timeline, mobile client features, iOS/Android release schedule, mobile team OKRs",
+        "mobile client development, iOS/Android app features, mobile team roadmap, mobile SDK integration"
+      ],
+      "scores": {
+        "correctness": 5,
+        "faithfulness": 5,
+        "completeness": 5,
+        "reasoning": "The agent clearly states it couldn't find the answer, shows the queries it tried, and provides a low relevance score, perfectly handling the unanswerable question."
+      },
+      "passed": true
+    },
+    {
+      "id": 19,
+      "question": "Who is the CTO?",
+      "category": "unanswerable",
+      "answerable": false,
+      "expected_answer": "",
+      "expected_source": "",
+      "agent_answer": "I couldn't find this in the documents.",
+      "agent_best_score": 3,
+      "agent_attempts": 3,
+      "agent_time": 8.2,
+      "queries_tried": [
+        "Who is the CTO?",
+        "CTO name, chief technology officer identity, executive team members",
+        "Search for 'CTO presented' or 'executive team' in meeting notes or company directory."
+      ],
+      "scores": {
+        "correctness": 5,
+        "faithfulness": 5,
+        "completeness": 5,
+        "reasoning": "The agent clearly and directly states it couldn't find the answer, which is the perfect response for an unanswerable question."
+      },
+      "passed": true
+    },
+    {
+      "id": 20,
+      "question": "What CI/CD tool do we use for deployments?",
+      "category": "unanswerable",
+      "answerable": false,
+      "expected_answer": "",
+      "expected_source": "",
+      "agent_answer": "I couldn't find this in the documents.",
+      "agent_best_score": 5,
+      "agent_attempts": 1,
+      "agent_time": 3.1,
+      "queries_tried": [
+        "What CI/CD tool do we use for deployments?"
+      ],
+      "scores": {
+        "correctness": 5,
+        "faithfulness": 5,
+        "completeness": 5,
+        "reasoning": "The agent clearly and directly states it couldn't find the answer in the documents, which is the perfect response for an unanswerable question."
+      },
+      "passed": true
+    }
+  ]
+}

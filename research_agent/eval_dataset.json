@@ -1,0 +1,162 @@
+[
+  {
+    "id": 1,
+    "question": "What message broker did we choose and why?",
+    "expected_answer": "Apache Kafka, chosen for its event sourcing capability which is critical for audit trail requirements. High throughput and the team's existing Kubernetes expertise made the ops complexity manageable.",
+    "expected_source": "architecture-decisions.md",
+    "category": "easy",
+    "answerable": true
+  },
+  {
+    "id": 2,
+    "question": "What caused the Q3 2025 outage?",
+    "expected_answer": "A database migration script ran against production instead of staging due to a misconfigured environment variable ($DB_HOST). It corrupted the users table, which cascaded to all services because they shared a single PostgreSQL instance.",
+    "expected_source": "incident-q3-2025.md",
+    "category": "easy",
+    "answerable": true
+  },
+  {
+    "id": 3,
+    "question": "How do we handle secrets and credential rotation?",
+    "expected_answer": "We use HashiCorp Vault (switched from Kubernetes Secrets in Nov 2025). Each service has a unique Vault role. Database credentials rotate every 30 days, API keys every 90 days, TLS certificates auto-renewed by cert-manager 30 days before expiry.",
+    "expected_source": "kubernetes-notes.md",
+    "category": "easy",
+    "answerable": true
+  },
+  {
+    "id": 4,
+    "question": "What is our monitoring and alerting stack?",
+    "expected_answer": "Prometheus for metrics (15s scrape interval), Grafana for dashboards and alerting, Loki for log aggregation (replaced ELK, 60% cost reduction), Jaeger for distributed tracing. Alerts route to PagerDuty for P1/P2, Slack for P3/P4.",
+    "expected_source": "kubernetes-notes.md",
+    "category": "easy",
+    "answerable": true
+  },
+  {
+    "id": 5,
+    "question": "What API gateway did we select?",
+    "expected_answer": "Envoy, chosen for native gRPC support, built-in Prometheus metrics for observability, and Istio service mesh integration. It's open source so the proxy costs $0, with about $200/month additional compute.",
+    "expected_source": "architecture-decisions.md",
+    "category": "easy",
+    "answerable": true
+  },
+  {
+    "id": 6,
+    "question": "How many engineers do we have and how many are we hiring?",
+    "expected_answer": "Currently 42 engineers across 6 teams. Plan to hire 8 more in Q1-Q2 2026: 2 SRE/Platform, 3 Backend (payment rewrite), 2 Frontend (new dashboard), 1 ML engineer (recommendation system).",
+    "expected_source": "meeting-notes.md",
+    "category": "easy",
+    "answerable": true
+  },
+  {
+    "id": 7,
+    "question": "What happened with the AWS key leak?",
+    "expected_answer": "In October 2025, a junior developer committed an AWS access key to a public repo. GitHub secret scanning detected it within 3 minutes. Key was rotated within 15 minutes. No unauthorized access found. Response: mandatory pre-commit hooks with gitleaks, security training, reduced IAM key lifetime to 12 hours using STS.",
+    "expected_source": "security-notes.md",
+    "category": "easy",
+    "answerable": true
+  },
+  {
+    "id": 8,
+    "question": "What database does each service use?",
+    "expected_answer": "Auth service: PostgreSQL. Payment service: PostgreSQL with row-level security. Reporting: ClickHouse (columnar, analytics-optimized). User profiles: MongoDB (flexible schema). Each service gets its own database (database-per-service pattern).",
+    "expected_source": "architecture-decisions.md",
+    "category": "easy",
+    "answerable": true
+  },
+  {
+    "id": 9,
+    "question": "What is the status of the microservices migration?",
+    "expected_answer": "Auth service extraction is complete (running in production since Feb 10, 2026). Payment service is 60% complete but blocked on PCI compliance review. Reporting engine has not started, deprioritized in favor of payment service.",
+    "expected_source": "meeting-notes.md",
+    "category": "medium",
+    "answerable": true
+  },
+  {
+    "id": 10,
+    "question": "How long was the Q3 outage and what was the timeline?",
+    "expected_answer": "4 hours 12 minutes (09:15 to 13:27 UTC). Migration triggered at 09:15, first alerts at 09:18, all endpoints down by 09:22, war room at 09:30, root cause found at 10:45, database restored from 3-hour-old backup at 12:00, resolved at 13:27.",
+    "expected_source": "incident-q3-2025.md",
+    "category": "medium",
+    "answerable": true
+  },
+  {
+    "id": 11,
+    "question": "How does our payment service handle distributed transactions?",
+    "expected_answer": "Uses the Saga pattern with choreography (event-based, not orchestration). Example: Place Order creates order, reserves funds, reserves inventory. If all succeed, confirm all. If any fails, compensating transactions run (refund, unreserve). Each service listens for events and reacts.",
+    "expected_source": "distributed-systems-notes.md",
+    "category": "medium",
+    "answerable": true
+  },
+  {
+    "id": 12,
+    "question": "What are our PCI DSS compliance requirements?",
+    "expected_answer": "PCI DSS Level 2. Cardholder data encrypted at rest (AES-256) and in transit (TLS 1.3). No raw card numbers stored — tokenized via Stripe. Quarterly vulnerability scans by ASV. Annual penetration test. Access requires MFA + VPN + IP allowlist. Compliant as of January 2026 audit.",
+    "expected_source": "security-notes.md",
+    "category": "medium",
+    "answerable": true
+  },
+  {
+    "id": 13,
+    "question": "What is the engineering budget for 2026?",
+    "expected_answer": "Approximately $974,000 (15% increase from 2025's $847,000). Extra budget allocated to: Kubernetes cluster expansion for microservices, hiring 2 SRE engineers, and proof of concept for edge computing. Also $150,000 allocated for AI/ML experiments.",
+    "expected_source": "meeting-notes.md",
+    "category": "medium",
+    "answerable": true
+  },
+  {
+    "id": 14,
+    "question": "What problems did we face running Kafka on Kubernetes?",
+    "expected_answer": "Three issues with Strimzi operator: 1) Broker rebalancing caused 30-second message delays during pod restarts. 2) Persistent volume claims needed manual cleanup after broker decommission. 3) ZooKeeper was a constant headache — switched to KRaft mode in December 2025. Current config: 5 brokers, replication factor 3, 200 partitions.",
+    "expected_source": "kubernetes-notes.md",
+    "category": "medium",
+    "answerable": true
+  },
+  {
+    "id": 15,
+    "question": "How does our zero trust network implementation work?",
+    "expected_answer": "Implemented in phases: 1) Service-to-service mTLS via Istio (done Q4 2025). 2) Network policies — deny all by default, explicit allow rules (done Q4 2025). 3) Identity-aware proxy for internal tools (in progress). 4) Full BeyondCorp model for employee access (planned Q3 2026).",
+    "expected_source": "security-notes.md",
+    "category": "hard",
+    "answerable": true
+  },
+  {
+    "id": 16,
+    "question": "What lessons did we learn from the Q3 outage?",
+    "expected_answer": "Three key lessons: 1) Shared database is a single point of failure — led to the database-per-service decision. 2) Environment variables need validation — now require explicit confirmation before destructive operations. 3) Backup frequency was insufficient — 3-hour-old backup meant data loss, switched to continuous WAL archiving.",
+    "expected_source": "incident-q3-2025.md",
+    "category": "hard",
+    "answerable": true
+  },
+  {
+    "id": 17,
+    "question": "What is our AI strategy?",
+    "expected_answer": "Three phases: Phase 1 is a customer support chatbot using RAG over the knowledge base. Phase 2 is AI-assisted code review for internal PRs. Phase 3 is a recommendation engine powered by embeddings. Budget is $150,000 for AI/ML experiments in 2026, using DeepSeek and Claude models.",
+    "expected_source": "meeting-notes.md",
+    "category": "hard",
+    "answerable": true
+  },
+  {
+    "id": 18,
+    "question": "What is our mobile app roadmap?",
+    "expected_answer": "",
+    "expected_source": "",
+    "category": "unanswerable",
+    "answerable": false
+  },
+  {
+    "id": 19,
+    "question": "Who is the CTO?",
+    "expected_answer": "",
+    "expected_source": "",
+    "category": "unanswerable",
+    "answerable": false
+  },
+  {
+    "id": 20,
+    "question": "What CI/CD tool do we use for deployments?",
+    "expected_answer": "",
+    "expected_source": "",
+    "category": "unanswerable",
+    "answerable": false
+  }
+]
